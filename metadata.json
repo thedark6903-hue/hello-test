@@ -1,0 +1,6 @@
+{
+  "name": "Hello Test",
+  "description": "A simple mobile application with a Hello World display and click counter.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
