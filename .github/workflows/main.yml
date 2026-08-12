@@ -45,8 +45,12 @@ jobs:
         run: |
           VERSION_CODE=${{ github.run_number }}
           VERSION_NAME="1.${{ github.run_number }}"
+
           sed -i "s/versionCode [0-9]*/versionCode ${VERSION_CODE}/" android/app/build.gradle
           sed -i "s/versionName \"[^\"]*\"/versionName \"${VERSION_NAME}\"/" android/app/build.gradle
+
+          echo "VERSION_CODE=${VERSION_CODE}" >> $GITHUB_ENV
+          echo "VERSION_NAME=${VERSION_NAME}" >> $GITHUB_ENV
 
       - name: Make Gradle executable
         run: chmod +x android/gradlew
@@ -55,10 +59,22 @@ jobs:
         working-directory: android
         run: ./gradlew assembleDebug
 
+      - name: Create version.json
+        run: |
+          cat > version.json <<EOF
+          {
+            "versionCode": ${VERSION_CODE},
+            "versionName": "${VERSION_NAME}",
+            "apkUrl": "https://github.com/${{ github.repository }}/releases/download/v${VERSION_NAME}/app-debug.apk"
+          }
+          EOF
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.${{ github.run_number }}
-          name: Hello Test v1.${{ github.run_number }}
+          tag_name: v${{ env.VERSION_NAME }}
+          name: Hello Test v${{ env.VERSION_NAME }}
           generate_release_notes: true
-          files: android/app/build/outputs/apk/debug/app-debug.apk
+          files: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            version.json
