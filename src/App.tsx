@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { APP_VERSION } from './version';
 
 const GITHUB_REPO = 'thedark6903-hue/hello-test';
 
