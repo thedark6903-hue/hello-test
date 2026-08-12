@@ -32,6 +32,20 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Set application version
+        run: |
+          VERSION_CODE=${{ github.run_number }}
+          VERSION_NAME="1.${{ github.run_number }}"
+
+          echo "VERSION_CODE=${VERSION_CODE}" >> $GITHUB_ENV
+          echo "VERSION_NAME=${VERSION_NAME}" >> $GITHUB_ENV
+
+          mkdir -p src
+          cat > src/version.ts <<EOF
+          export const APP_VERSION_CODE = ${VERSION_CODE};
+          export const APP_VERSION = "${VERSION_NAME}";
+          EOF
+
       - name: Build web app
         run: npm run build
 
@@ -43,14 +57,8 @@ jobs:
 
       - name: Set Android version
         run: |
-          VERSION_CODE=${{ github.run_number }}
-          VERSION_NAME="1.${{ github.run_number }}"
-
           sed -i "s/versionCode [0-9]*/versionCode ${VERSION_CODE}/" android/app/build.gradle
           sed -i "s/versionName \"[^\"]*\"/versionName \"${VERSION_NAME}\"/" android/app/build.gradle
-
-          echo "VERSION_CODE=${VERSION_CODE}" >> $GITHUB_ENV
-          echo "VERSION_NAME=${VERSION_NAME}" >> $GITHUB_ENV
 
       - name: Make Gradle executable
         run: chmod +x android/gradlew
