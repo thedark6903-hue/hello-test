@@ -51,7 +51,10 @@ jobs:
 
       - name: Install Capacitor
         run: npm install --no-save @capacitor/core @capacitor/cli @capacitor/android
-
+        
+      - name: Check Capacitor version
+        run: npx cap --version
+        
       - name: Sync Capacitor Android project
         run: npx cap sync android
 
