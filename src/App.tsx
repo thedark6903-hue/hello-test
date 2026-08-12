@@ -6,7 +6,7 @@ const GITHUB_REPO = 'thedark6903-hue/hello-test';
 
 // Temporary fallback.
 // In the next workflow change, the real version will be injected automatically.
-const CURRENT_VERSION = '1.0';
+const CURRENT_VERSION = APP_VERSION;
 
 type UpdateInfo = {
   versionName: string;
