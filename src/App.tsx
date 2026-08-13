@@ -50,7 +50,7 @@ export default function App() {
 
     toastTimeoutRef.current = setTimeout(() => {
       setToast(null);
-    }, 2500);
+    }, 5000);
   };
 
   const checkForUpdate = async () => {
@@ -61,19 +61,27 @@ export default function App() {
     try {
       const cacheBuster = Date.now();
 
-      const response = await fetch(
-        `https://api.github.com/repos/${GITHUB_REPO}/releases/latest?_=${cacheBuster}`,
-        {
-          headers: {
-            Accept: 'application/vnd.github+json',
-            'Cache-Control': 'no-cache',
-          },
-          cache: 'no-store',
-        }
-      );
+      const apiUrl =
+        `https://api.github.com/repos/${GITHUB_REPO}/releases/latest?_=${cacheBuster}`;
+
+      console.log('Checking update:', apiUrl);
+      console.log('Current version:', CURRENT_VERSION);
+
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/vnd.github+json',
+          'Cache-Control': 'no-cache',
+        },
+        cache: 'no-store',
+      });
 
       if (!response.ok) {
-        throw new Error(`GitHub API error: ${response.status}`);
+        const errorText = await response.text();
+
+        throw new Error(
+          `GitHub API ${response.status}: ${errorText.slice(0, 120)}`
+        );
       }
 
       const release = await response.json();
@@ -83,7 +91,7 @@ export default function App() {
         .trim();
 
       if (!latestVersion) {
-        throw new Error('Latest release version not found');
+        throw new Error('GitHub latest release has no tag_name');
       }
 
       const assets: GitHubAsset[] = Array.isArray(release.assets)
@@ -100,8 +108,7 @@ export default function App() {
         apkAsset?.browser_download_url ||
         `https://github.com/${GITHUB_REPO}/releases/latest/download/app-release.apk`;
 
-      console.log('Current app version:', CURRENT_VERSION);
-      console.log('Latest GitHub version:', latestVersion);
+      console.log('Latest version:', latestVersion);
       console.log('APK URL:', apkUrl);
 
       if (compareVersions(latestVersion, CURRENT_VERSION) > 0) {
@@ -113,18 +120,20 @@ export default function App() {
         triggerToast(`New version ${latestVersion} available!`);
       } else {
         setUpdate(null);
-        triggerToast('You are using the latest version.');
+        triggerToast(
+          `You are using the latest version (${CURRENT_VERSION}).`
+        );
       }
-   } catch (error) {
-  console.error('Update check failed:', error);
+    } catch (error) {
+      console.error('Update check failed:', error);
 
-  const message =
-    error instanceof Error
-      ? error.message
-      : String(error);
+      const message =
+        error instanceof Error
+          ? error.message
+          : String(error);
 
-  triggerToast(`Update check failed: ${message}`);
-}
+      triggerToast(`Update check failed: ${message}`);
+    } finally {
       setCheckingUpdate(false);
     }
   };
@@ -152,10 +161,10 @@ export default function App() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -20, scale: 0.95 }}
             transition={{ duration: 0.2 }}
-            className="fixed top-6 z-50 bg-slate-900 text-white px-6 py-3 rounded-full shadow-xl text-sm font-medium flex items-center gap-2 border border-slate-700/50"
+            className="fixed top-6 left-4 right-4 z-50 mx-auto max-w-md bg-slate-900 text-white px-5 py-3 rounded-2xl shadow-xl text-sm font-medium flex items-center gap-2 border border-slate-700/50"
           >
             <span>✨</span>
-            <span>{toast}</span>
+            <span className="break-words">{toast}</span>
           </motion.div>
         )}
       </AnimatePresence>
