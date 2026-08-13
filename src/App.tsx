@@ -4,10 +4,6 @@ import { APP_VERSION } from './version';
 
 const GITHUB_REPO = 'thedark6903-hue/hello-test';
 
-// Temporary fallback.
-// In the next workflow change, the real version will be injected automatically.
-const CURRENT_VERSION = APP_VERSION;
-
 type UpdateInfo = {
   versionName: string;
   apkUrl: string;
@@ -30,8 +26,18 @@ function compareVersions(a: string, b: string) {
   return 0;
 }
 
+type GithubAsset = {
+  name?: string;
+  browser_download_url?: string;
+};
+
+type GithubRelease = {
+  tag_name?: string;
+  assets?: GithubAsset[];
+};
+
 export default function App() {
-  const [count, setCount] = useState<number>(0);
+  const [count, setCount] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
   const [update, setUpdate] = useState<UpdateInfo | null>(null);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
@@ -56,12 +62,16 @@ export default function App() {
     setCheckingUpdate(true);
 
     try {
+      const cacheBuster = Date.now();
+
       const response = await fetch(
-        `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`,
+        `https://api.github.com/repos/${GITHUB_REPO}/releases/latest?_=${cacheBuster}`,
         {
           headers: {
             Accept: 'application/vnd.github+json',
+            'Cache-Control': 'no-cache',
           },
+          cache: 'no-store',
         }
       );
 
@@ -69,7 +79,7 @@ export default function App() {
         throw new Error(`GitHub API error: ${response.status}`);
       }
 
-      const release = await response.json();
+      const release: GithubRelease = await response.json();
 
       const latestVersion = String(release.tag_name || '').replace(/^v/i, '');
 
@@ -79,25 +89,26 @@ export default function App() {
 
       const apkAsset = Array.isArray(release.assets)
         ? release.assets.find(
-            (asset: { name?: string; browser_download_url?: string }) =>
-              asset.name === 'app-debug.apk'
+            (asset) =>
+              asset.name === 'app-debug.apk' &&
+              typeof asset.browser_download_url === 'string'
           )
         : null;
 
-      const apkUrl =
-        apkAsset?.browser_download_url ||
-        `https://github.com/${GITHUB_REPO}/releases/latest/download/app-debug.apk`;
+      if (!apkAsset?.browser_download_url) {
+        throw new Error('APK not found in latest release');
+      }
 
-      if (compareVersions(latestVersion, CURRENT_VERSION) > 0) {
+      if (compareVersions(latestVersion, APP_VERSION) > 0) {
         setUpdate({
           versionName: latestVersion,
-          apkUrl,
+          apkUrl: apkAsset.browser_download_url,
         });
 
         triggerToast(`New version ${latestVersion} available!`);
       } else {
         setUpdate(null);
-        triggerToast('You are using the latest version.');
+        triggerToast(`You are using version ${APP_VERSION}.`);
       }
     } catch (error) {
       console.error('Update check failed:', error);
@@ -105,6 +116,13 @@ export default function App() {
     } finally {
       setCheckingUpdate(false);
     }
+  };
+
+  const downloadUpdate = () => {
+    if (!update?.apkUrl) return;
+
+    // Android/browser will handle the APK download.
+    window.open(update.apkUrl, '_blank');
   };
 
   useEffect(() => {
@@ -116,7 +134,6 @@ export default function App() {
       id="app-container"
       className="min-h-screen bg-[#F9F9F9] flex items-center justify-center p-4 sm:p-6 font-sans text-[#1A1A1A] antialiased relative"
     >
-      {/* Toast Notification */}
       <AnimatePresence>
         {toast && (
           <motion.div
@@ -134,7 +151,7 @@ export default function App() {
       </AnimatePresence>
 
       <div className="w-full max-w-md bg-white rounded-3xl sm:rounded-[40px] shadow-[0_32px_64px_-12px_rgba(0,0,0,0.08)] border border-gray-100 flex flex-col justify-between overflow-hidden min-h-[640px] relative my-auto">
-        {/* Header */}
+
         <header id="app-header" className="pt-8 sm:pt-10 px-8 pb-4">
           <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-gray-400 mb-1">
             Mobile Application
@@ -150,7 +167,6 @@ export default function App() {
           <div className="h-[1px] w-full bg-gray-100 mt-4" />
         </header>
 
-        {/* Update Banner */}
         <AnimatePresence>
           {update && (
             <motion.div
@@ -172,14 +188,13 @@ export default function App() {
                       Version {update.versionName} is ready.
                     </p>
 
-                    <a
-                      href={update.apkUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex mt-3 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-full text-sm font-semibold"
+                    <button
+                      type="button"
+                      onClick={downloadUpdate}
+                      className="mt-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white px-4 py-2 rounded-full text-sm font-semibold"
                     >
-                      Download Update
-                    </a>
+                      Download & Update
+                    </button>
                   </div>
                 </div>
               </div>
@@ -187,7 +202,6 @@ export default function App() {
           )}
         </AnimatePresence>
 
-        {/* Main Content */}
         <main
           id="main-content"
           className="flex-1 flex flex-col items-center justify-center px-8 text-center py-6"
@@ -205,7 +219,6 @@ export default function App() {
             </p>
           </div>
 
-          {/* Action Buttons */}
           <div className="w-full space-y-3 mb-6">
             <button
               id="happy-btn"
@@ -227,7 +240,6 @@ export default function App() {
           </div>
 
           <div className="w-full space-y-6">
-            {/* Blue Action Button */}
             <button
               id="click-me-btn"
               type="button"
@@ -250,10 +262,9 @@ export default function App() {
               </p>
             </div>
 
-            {/* Version / Update Check */}
             <div className="flex flex-col items-center gap-2">
               <span className="text-[10px] uppercase tracking-widest text-gray-400">
-                Version {CURRENT_VERSION}
+                Version {APP_VERSION}
               </span>
 
               <button
@@ -268,7 +279,6 @@ export default function App() {
           </div>
         </main>
 
-        {/* Footer */}
         <footer
           id="app-footer"
           className="pb-8 px-8 flex flex-col items-center justify-center"
