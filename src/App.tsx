@@ -4,9 +4,16 @@ import { APP_VERSION } from './version';
 
 const GITHUB_REPO = 'thedark6903-hue/hello-test';
 
+const CURRENT_VERSION = APP_VERSION;
+
 type UpdateInfo = {
   versionName: string;
   apkUrl: string;
+};
+
+type GitHubAsset = {
+  name?: string;
+  browser_download_url?: string;
 };
 
 function compareVersions(a: string, b: string) {
@@ -16,8 +23,8 @@ function compareVersions(a: string, b: string) {
   const length = Math.max(aParts.length, bParts.length);
 
   for (let i = 0; i < length; i++) {
-    const aPart = aParts[i] ?? 0;
-    const bPart = bParts[i] ?? 0;
+    const aPart = Number.isFinite(aParts[i]) ? aParts[i] : 0;
+    const bPart = Number.isFinite(bParts[i]) ? bParts[i] : 0;
 
     if (aPart > bPart) return 1;
     if (aPart < bPart) return -1;
@@ -26,18 +33,8 @@ function compareVersions(a: string, b: string) {
   return 0;
 }
 
-type GithubAsset = {
-  name?: string;
-  browser_download_url?: string;
-};
-
-type GithubRelease = {
-  tag_name?: string;
-  assets?: GithubAsset[];
-};
-
 export default function App() {
-  const [count, setCount] = useState(0);
+  const [count, setCount] = useState<number>(0);
   const [toast, setToast] = useState<string | null>(null);
   const [update, setUpdate] = useState<UpdateInfo | null>(null);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
@@ -79,36 +76,44 @@ export default function App() {
         throw new Error(`GitHub API error: ${response.status}`);
       }
 
-      const release: GithubRelease = await response.json();
+      const release = await response.json();
 
-      const latestVersion = String(release.tag_name || '').replace(/^v/i, '');
+      const latestVersion = String(release.tag_name || '')
+        .replace(/^v/i, '')
+        .trim();
 
       if (!latestVersion) {
         throw new Error('Latest release version not found');
       }
 
-      const apkAsset = Array.isArray(release.assets)
-        ? release.assets.find(
-            (asset) =>
-              asset.name === 'app-debug.apk' &&
-              typeof asset.browser_download_url === 'string'
-          )
-        : null;
+      const assets: GitHubAsset[] = Array.isArray(release.assets)
+        ? release.assets
+        : [];
 
-      if (!apkAsset?.browser_download_url) {
-        throw new Error('APK not found in latest release');
-      }
+      const apkAsset = assets.find(
+        (asset) =>
+          asset.name === 'app-release.apk' &&
+          typeof asset.browser_download_url === 'string'
+      );
 
-      if (compareVersions(latestVersion, APP_VERSION) > 0) {
+      const apkUrl =
+        apkAsset?.browser_download_url ||
+        `https://github.com/${GITHUB_REPO}/releases/latest/download/app-release.apk`;
+
+      console.log('Current app version:', CURRENT_VERSION);
+      console.log('Latest GitHub version:', latestVersion);
+      console.log('APK URL:', apkUrl);
+
+      if (compareVersions(latestVersion, CURRENT_VERSION) > 0) {
         setUpdate({
           versionName: latestVersion,
-          apkUrl: apkAsset.browser_download_url,
+          apkUrl,
         });
 
         triggerToast(`New version ${latestVersion} available!`);
       } else {
         setUpdate(null);
-        triggerToast(`You are using version ${APP_VERSION}.`);
+        triggerToast('You are using the latest version.');
       }
     } catch (error) {
       console.error('Update check failed:', error);
@@ -118,15 +123,14 @@ export default function App() {
     }
   };
 
-  const downloadUpdate = () => {
-    if (!update?.apkUrl) return;
-
-    // Android/browser will handle the APK download.
-    window.open(update.apkUrl, '_blank');
-  };
-
   useEffect(() => {
     checkForUpdate();
+
+    return () => {
+      if (toastTimeoutRef.current) {
+        clearTimeout(toastTimeoutRef.current);
+      }
+    };
   }, []);
 
   return (
@@ -151,7 +155,6 @@ export default function App() {
       </AnimatePresence>
 
       <div className="w-full max-w-md bg-white rounded-3xl sm:rounded-[40px] shadow-[0_32px_64px_-12px_rgba(0,0,0,0.08)] border border-gray-100 flex flex-col justify-between overflow-hidden min-h-[640px] relative my-auto">
-
         <header id="app-header" className="pt-8 sm:pt-10 px-8 pb-4">
           <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-gray-400 mb-1">
             Mobile Application
@@ -188,13 +191,14 @@ export default function App() {
                       Version {update.versionName} is ready.
                     </p>
 
-                    <button
-                      type="button"
-                      onClick={downloadUpdate}
-                      className="mt-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white px-4 py-2 rounded-full text-sm font-semibold"
+                    <a
+                      href={update.apkUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex mt-3 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-full text-sm font-semibold"
                     >
-                      Download & Update
-                    </button>
+                      Download Update
+                    </a>
                   </div>
                 </div>
               </div>
@@ -264,7 +268,7 @@ export default function App() {
 
             <div className="flex flex-col items-center gap-2">
               <span className="text-[10px] uppercase tracking-widest text-gray-400">
-                Version {APP_VERSION}
+                Version {CURRENT_VERSION}
               </span>
 
               <button
