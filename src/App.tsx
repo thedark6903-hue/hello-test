@@ -115,10 +115,16 @@ export default function App() {
         setUpdate(null);
         triggerToast('You are using the latest version.');
       }
-    } catch (error) {
-      console.error('Update check failed:', error);
-      triggerToast('Could not check for updates.');
-    } finally {
+   } catch (error) {
+  console.error('Update check failed:', error);
+
+  const message =
+    error instanceof Error
+      ? error.message
+      : String(error);
+
+  triggerToast(`Update check failed: ${message}`);
+}
       setCheckingUpdate(false);
     }
   };
