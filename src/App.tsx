@@ -53,28 +53,79 @@ export default function App() {
     }, 5000);
   };
 
-  const checkForUpdate = async () => {
-    if (checkingUpdate) return;
+ const checkForUpdate = async () => {
+  if (checkingUpdate) return;
 
-    setCheckingUpdate(true);
+  setCheckingUpdate(true);
 
-    try {
-      const cacheBuster = Date.now();
+  try {
+    const cacheBuster = Date.now();
 
-      const apiUrl =
-        `https://api.github.com/repos/${GITHUB_REPO}/releases/latest?_=${cacheBuster}`;
+    const versionUrl =
+      `https://raw.githubusercontent.com/${GITHUB_REPO}/main/version.json?_=${cacheBuster}`;
 
-      console.log('Checking update:', apiUrl);
-      console.log('Current version:', CURRENT_VERSION);
+    console.log('Checking version:', versionUrl);
+    console.log('Current version:', CURRENT_VERSION);
 
-      const response = await fetch(apiUrl, {
-        method: 'GET',
-        headers: {
-          Accept: 'application/vnd.github+json',
-          'Cache-Control': 'no-cache',
-        },
-        cache: 'no-store',
+    const response = await fetch(versionUrl, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        'Cache-Control': 'no-cache',
+      },
+      cache: 'no-store',
+    });
+
+    if (!response.ok) {
+      throw new Error(`Version file HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    const latestVersion = String(data.version || '')
+      .replace(/^v/i, '')
+      .trim();
+
+    const apkUrl = String(data.apk || '').trim();
+
+    if (!latestVersion) {
+      throw new Error('version.json has no version');
+    }
+
+    if (!apkUrl) {
+      throw new Error('version.json has no APK URL');
+    }
+
+    console.log('Latest version:', latestVersion);
+    console.log('APK URL:', apkUrl);
+
+    if (compareVersions(latestVersion, CURRENT_VERSION) > 0) {
+      setUpdate({
+        versionName: latestVersion,
+        apkUrl,
       });
+
+      triggerToast(`New version ${latestVersion} available!`);
+    } else {
+      setUpdate(null);
+
+      triggerToast(
+        `You are using the latest version (${CURRENT_VERSION}).`
+      );
+    }
+  } catch (error) {
+    console.error('Update check failed:', error);
+
+    const message =
+      error instanceof Error
+        ? error.message
+        : String(error);
+
+    triggerToast(`Update check failed: ${message}`);
+  } finally {
+    setCheckingUpdate(false);
+  }
+};
 
       if (!response.ok) {
         const errorText = await response.text();
