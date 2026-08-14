@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { CapacitorHttp } from '@capacitor/core';
 import { APP_VERSION } from './version';
 
 const GITHUB_REPO = 'thedark6903-hue/hello-test';
@@ -62,26 +63,31 @@ export default function App() {
       console.log('Checking version:', versionUrl);
       console.log('Current version:', CURRENT_VERSION);
 
-      const response = await fetch(versionUrl, {
-        method: 'GET',
+      const response = await CapacitorHttp.get({
+        url: versionUrl,
         headers: {
           Accept: 'application/json',
           'Cache-Control': 'no-cache',
         },
-        cache: 'no-store',
       });
 
-      if (!response.ok) {
+      console.log('Version response status:', response.status);
+      console.log('Version response data:', response.data);
+
+      if (response.status < 200 || response.status >= 300) {
         throw new Error(`Version file HTTP ${response.status}`);
       }
 
-      const data = await response.json();
+      const data =
+        typeof response.data === 'string'
+          ? JSON.parse(response.data)
+          : response.data;
 
-      const latestVersion = String(data.version || '')
+      const latestVersion = String(data?.version || '')
         .replace(/^v/i, '')
         .trim();
 
-      const apkUrl = String(data.apk || '').trim();
+      const apkUrl = String(data?.apk || '').trim();
 
       if (!latestVersion) {
         throw new Error('version.json has no version');
