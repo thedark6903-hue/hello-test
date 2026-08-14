@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CapacitorHttp } from '@capacitor/core';
+import { Settings } from 'lucide-react';
 import { APP_VERSION } from './version';
+import { SettingsView, ThemePreference } from './components/SettingsView';
 
 const GITHUB_REPO = 'thedark6903-hue/hello-test';
 
@@ -34,6 +36,23 @@ export default function App() {
   const [toast, setToast] = useState<string | null>(null);
   const [update, setUpdate] = useState<UpdateInfo | null>(null);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  const [theme, setTheme] = useState<ThemePreference>(() => {
+    if (typeof window === 'undefined') return 'system';
+
+    const saved = window.localStorage.getItem('app_theme');
+    if (saved === 'light' || saved === 'dark' || saved === 'system') {
+      return saved;
+    }
+
+    return 'system';
+  });
+
+  const [systemIsDark, setSystemIsDark] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  });
 
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -48,6 +67,13 @@ export default function App() {
       setToast(null);
     }, 5000);
   };
+
+  const handleThemeChange = (newTheme: ThemePreference) => {
+    setTheme(newTheme);
+    window.localStorage.setItem('app_theme', newTheme);
+  };
+
+  const isDark = theme === 'dark' || (theme === 'system' && systemIsDark);
 
   const checkForUpdate = async () => {
     if (checkingUpdate) return;
@@ -111,7 +137,7 @@ export default function App() {
         setUpdate(null);
 
         triggerToast(
-          `You are using the latest version (${CURRENT_VERSION}).`
+          `You are using the latest version (${CURRENT_VERSION}).`,
         );
       }
     } catch (error) {
@@ -138,10 +164,29 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+
+    const handleChange = (event: MediaQueryListEvent) => {
+      setSystemIsDark(event.matches);
+    };
+
+    setSystemIsDark(mediaQuery.matches);
+    mediaQuery.addEventListener('change', handleChange);
+
+    return () => {
+      mediaQuery.removeEventListener('change', handleChange);
+    };
+  }, []);
+
   return (
     <div
       id="app-container"
-      className="min-h-screen bg-[#F9F9F9] flex items-center justify-center p-4 sm:p-6 font-sans text-[#1A1A1A] antialiased relative"
+      className={`min-h-screen ${
+        isDark
+          ? 'bg-[#121214] text-[#EDEDED]'
+          : 'bg-[#F9F9F9] text-[#1A1A1A]'
+      } flex items-center justify-center p-4 sm:p-6 font-sans antialiased relative transition-colors duration-200`}
     >
       <AnimatePresence>
         {toast && (
@@ -151,7 +196,11 @@ export default function App() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -20, scale: 0.95 }}
             transition={{ duration: 0.2 }}
-            className="fixed top-6 left-4 right-4 z-50 mx-auto max-w-md bg-slate-900 text-white px-5 py-3 rounded-2xl shadow-xl text-sm font-medium flex items-center gap-2 border border-slate-700/50"
+            className={`fixed top-6 left-4 right-4 z-50 mx-auto max-w-md px-5 py-3 rounded-2xl shadow-xl text-sm font-medium flex items-center gap-2 border ${
+              isDark
+                ? 'bg-zinc-800 text-white border-zinc-700'
+                : 'bg-slate-900 text-white border-slate-700/50'
+            }`}
           >
             <span>✨</span>
             <span className="break-words">{toast}</span>
@@ -159,20 +208,49 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      <div className="w-full max-w-md bg-white rounded-3xl sm:rounded-[40px] shadow-[0_32px_64px_-12px_rgba(0,0,0,0.08)] border border-gray-100 flex flex-col justify-between overflow-hidden min-h-[640px] relative my-auto">
+      <div
+        className={`w-full max-w-md ${
+          isDark
+            ? 'bg-zinc-900/95 border-zinc-800 shadow-[0_32px_64px_-12px_rgba(0,0,0,0.5)]'
+            : 'bg-white border-gray-100 shadow-[0_32px_64px_-12px_rgba(0,0,0,0.08)]'
+        } rounded-3xl sm:rounded-[40px] border flex flex-col justify-between overflow-hidden min-h-[640px] relative my-auto transition-colors duration-200`}
+      >
         <header id="app-header" className="pt-8 sm:pt-10 px-8 pb-4">
-          <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-gray-400 mb-1">
-            Mobile Application
-          </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-gray-400 mb-1">
+                Mobile Application
+              </p>
 
-          <h1
-            id="app-title"
-            className="text-2xl font-serif italic text-[#1A1A1A]"
-          >
-            Hello Test
-          </h1>
+              <h1
+                id="app-title"
+                className="text-2xl font-serif italic"
+              >
+                Hello Test
+              </h1>
+            </div>
 
-          <div className="h-[1px] w-full bg-gray-100 mt-4" />
+            <button
+              id="open-settings-btn"
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              className={`p-2.5 rounded-2xl transition-all duration-200 cursor-pointer active:scale-95 ${
+                isDark
+                  ? 'bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300'
+                  : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+              }`}
+              title="Settings & Update Center"
+              aria-label="Settings & Update Center"
+            >
+              <Settings className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div
+            className={`h-[1px] w-full mt-4 ${
+              isDark ? 'bg-zinc-800' : 'bg-gray-100'
+            }`}
+          />
         </header>
 
         <AnimatePresence>
@@ -218,7 +296,7 @@ export default function App() {
           <div className="space-y-2 mb-8">
             <h2
               id="hello-world-text"
-              className="text-4xl sm:text-5xl font-serif text-[#1A1A1A] leading-tight tracking-tight"
+              className="text-4xl sm:text-5xl font-serif leading-tight tracking-tight"
             >
               Hello World 👋
             </h2>
@@ -258,14 +336,18 @@ export default function App() {
               Click Me
             </button>
 
-            <div className="py-6 border-y border-gray-100 flex flex-col items-center w-full">
+            <div
+              className={`py-6 border-y flex flex-col items-center w-full ${
+                isDark ? 'border-zinc-800' : 'border-gray-100'
+              }`}
+            >
               <span className="text-[10px] uppercase tracking-[0.1em] text-gray-400 mb-1">
                 Interaction Stats
               </span>
 
               <p
                 id="counter-display"
-                className="text-2xl sm:text-3xl font-mono font-light text-[#1A1A1A]"
+                className="text-2xl sm:text-3xl font-mono font-light"
               >
                 Button clicked: {count}
               </p>
@@ -292,13 +374,30 @@ export default function App() {
           id="app-footer"
           className="pb-8 px-8 flex flex-col items-center justify-center"
         >
-          <div className="w-24 h-1 bg-gray-200 rounded-full mb-2" />
+          <div
+            className={`w-24 h-1 rounded-full mb-2 ${
+              isDark ? 'bg-zinc-800' : 'bg-gray-200'
+            }`}
+          />
 
-          <span className="text-[10px] text-gray-400 uppercase tracking-widest">
-            Hello Test
-          </span>
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+            className="text-[10px] text-gray-400 uppercase tracking-widest hover:text-blue-500 transition-colors cursor-pointer"
+          >
+            Hello Test • v{CURRENT_VERSION}
+          </button>
         </footer>
       </div>
+
+      <SettingsView
+        isOpen={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        theme={theme}
+        onThemeChange={handleThemeChange}
+        isDark={isDark}
+        onShowToast={triggerToast}
+      />
     </div>
   );
 }
