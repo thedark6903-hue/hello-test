@@ -19,92 +19,264 @@ jobs:
         with:
           fetch-depth: 0
 
+      # ---------------------------------------------------------
+      # 1. Automatically bump version
+      # ---------------------------------------------------------
+      - name: Automatically bump version
+        id: bump_version
+        shell: bash
+        run: |
+          set -e
+
+          VERSION_FILE="src/version.ts"
+          GRADLE_FILE="android/app/build.gradle"
+          JSON_FILE="version.json"
+
+          if [ ! -f "$VERSION_FILE" ]; then
+            echo "ERROR: $VERSION_FILE not found"
+            exit 1
+          fi
+
+          if [ ! -f "$GRADLE_FILE" ]; then
+            echo "ERROR: $GRADLE_FILE not found"
+            exit 1
+          fi
+
+          CURRENT_VERSION=$(grep "APP_VERSION" "$VERSION_FILE" | head -1 | sed -E "s/.*['\"]([0-9]+\.[0-9]+\.[0-9]+|[0-9]+\.[0-9]+)['\"].*/\1/")
+
+          if [ -z "$CURRENT_VERSION" ]; then
+            echo "ERROR: Could not read APP_VERSION"
+            exit 1
+          fi
+
+          echo "Current APP_VERSION: $CURRENT_VERSION"
+
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+
+          if [ -z "$PATCH" ]; then
+            PATCH=0
+          fi
+
+          # Bump the minor version:
+          # 1.15 -> 1.16
+          # 1.16 -> 1.17
+          NEW_MINOR=$((MINOR + 1))
+          NEW_VERSION="${MAJOR}.${NEW_MINOR}"
+
+          # Version code:
+          CURRENT_VERSION_CODE=$(grep -m1 "versionCode" "$GRADLE_FILE" | grep -oE '[0-9]+' | head -1)
+
+          if [ -z "$CURRENT_VERSION_CODE" ]; then
+            echo "ERROR: Could not read versionCode"
+            exit 1
+          fi
+
+          NEW_VERSION_CODE=$((CURRENT_VERSION_CODE + 1))
+
+          echo "New version: $NEW_VERSION"
+          echo "New version code: $NEW_VERSION_CODE"
+
+          # -------------------------------------------------------
+          # Update src/version.ts
+          # -------------------------------------------------------
+          sed -i -E \
+            "s/(APP_VERSION[[:space:]]*=[[:space:]]*['\"])[^'\"]+(['\"])/\1${NEW_VERSION}\2/" \
+            "$VERSION_FILE"
+
+          sed -i -E \
+            "s/(VERSION_CODE[[:space:]]*=[[:space:]]*)[0-9]+/\1${NEW_VERSION_CODE}/" \
+            "$VERSION_FILE"
+
+          # -------------------------------------------------------
+          # Update Android build.gradle
+          # -------------------------------------------------------
+          sed -i -E \
+            "0,/versionCode[[:space:]]+[0-9]+/s//versionCode ${NEW_VERSION_CODE}/" \
+            "$GRADLE_FILE"
+
+          sed -i -E \
+            "0,/versionName[[:space:]]+['\"][^'\"]+['\"]/s//versionName \"${NEW_VERSION}\"/" \
+            "$GRADLE_FILE"
+
+          # -------------------------------------------------------
+          # Update version.json
+          # -------------------------------------------------------
+          cat > "$JSON_FILE" <<EOF
+          {
+            "version": "${NEW_VERSION}",
+            "apk": "https://github.com/thedark6903-hue/hello-test/releases/latest/download/app-release.apk"
+          }
+          EOF
+
+          echo "VERSION_CODE=${NEW_VERSION_CODE}" >> "$GITHUB_ENV"
+          echo "VERSION_NAME=${NEW_VERSION}" >> "$GITHUB_ENV"
+
+          echo "version_code=${NEW_VERSION_CODE}" >> "$GITHUB_OUTPUT"
+          echo "version_name=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
+
+          echo ""
+          echo "Updated files:"
+          echo "--------------------------------"
+          cat "$VERSION_FILE"
+          echo "--------------------------------"
+          grep -m2 -E "versionCode|versionName" "$GRADLE_FILE"
+          echo "--------------------------------"
+          cat "$JSON_FILE"
+          echo "--------------------------------"
+
+      # ---------------------------------------------------------
+      # 2. Commit automatic version changes
+      # ---------------------------------------------------------
+      - name: Commit automatic version bump
+        shell: bash
+        run: |
+          set -e
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add src/version.ts android/app/build.gradle version.json
+
+          if git diff --cached --quiet; then
+            echo "No version changes to commit."
+            exit 0
+          fi
+
+          git commit -m "chore: bump app version to ${VERSION_NAME} [skip ci]"
+          git push origin main
+
+      # ---------------------------------------------------------
+      # 3. Java
+      # ---------------------------------------------------------
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
 
+      # ---------------------------------------------------------
+      # 4. Node
+      # ---------------------------------------------------------
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: npm
 
+      # ---------------------------------------------------------
+      # 5. Install dependencies
+      # ---------------------------------------------------------
       - name: Install dependencies
         run: npm install
 
+      # ---------------------------------------------------------
+      # 6. Build web app
+      # ---------------------------------------------------------
       - name: Build web app
         run: npm run build
 
+      # ---------------------------------------------------------
+      # 7. Install Capacitor
+      # ---------------------------------------------------------
       - name: Install Capacitor
-        run: npm install --no-save @capacitor/core@7.6.8 @capacitor/cli@7.6.8 @capacitor/android@7.6.8 @capacitor/app@7.1.2
+        run: |
+          npm install --no-save \
+            @capacitor/core@7.6.8 \
+            @capacitor/cli@7.6.8 \
+            @capacitor/android@7.6.8 \
+            @capacitor/app@7.1.2
 
+      # ---------------------------------------------------------
+      # 8. Check Capacitor
+      # ---------------------------------------------------------
       - name: Check Capacitor version
         run: npx cap --version
 
+      # ---------------------------------------------------------
+      # 9. Sync Android
+      # ---------------------------------------------------------
       - name: Sync Capacitor Android project
         run: npx cap sync android
 
+      # ---------------------------------------------------------
+      # 10. Restore signing keystore
+      # ---------------------------------------------------------
       - name: Restore signing keystore
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
+          set -e
+
           echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/github-release.keystore
+
           chmod 600 android/app/github-release.keystore
 
+          test -s android/app/github-release.keystore
+
+          echo "Keystore restored successfully."
+
+      # ---------------------------------------------------------
+      # 11. Make Gradle executable
+      # ---------------------------------------------------------
       - name: Make Gradle executable
         run: chmod +x android/gradlew
 
+      # ---------------------------------------------------------
+      # 12. Build signed release APK
+      # ---------------------------------------------------------
       - name: Build signed APK
         working-directory: android
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: ./gradlew assembleRelease
-
-      - name: Read Android version
-        id: version
-        shell: bash
         run: |
-          VERSION_CODE=$(grep -n "versionCode" android/app/build.gradle | head -1 | sed 's/[^0-9]*//g')
-          VERSION_NAME=$(grep -n "versionName" android/app/build.gradle | head -1 | sed 's/.*versionName[[:space:]]*["'\'']\([^"'\'']*\)["'\''].*/\1/')
+          ./gradlew assembleRelease
 
-          echo "Version code: $VERSION_CODE"
-          echo "Version name: $VERSION_NAME"
-
-          echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
-          echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
-
+      # ---------------------------------------------------------
+      # 13. Verify APK
+      # ---------------------------------------------------------
       - name: Verify APK exists
         run: |
-          test -f android/app/build/outputs/apk/release/app-release.apk
-          echo "APK successfully created."
+          APK_PATH="android/app/build/outputs/apk/release/app-release.apk"
 
+          test -f "$APK_PATH"
+
+          echo "APK successfully created:"
+          ls -lh "$APK_PATH"
+
+      # ---------------------------------------------------------
+      # 14. Create GitHub Release
+      # ---------------------------------------------------------
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.version.outputs.version_name }}
-          name: Hello Test v${{ steps.version.outputs.version_name }}
+          tag_name: v${{ env.VERSION_NAME }}
+          name: Hello Test v${{ env.VERSION_NAME }}
           body: |
-            ## Hello Test v${{ steps.version.outputs.version_name }}
+            ## Hello Test v${{ env.VERSION_NAME }}
 
-            Android APK update.
+            Automatic Android release.
 
-            - Version code: ${{ steps.version.outputs.version_code }}
-            - Version name: ${{ steps.version.outputs.version_name }}
+            - Version code: ${{ env.VERSION_CODE }}
+            - Version name: ${{ env.VERSION_NAME }}
           files: |
             android/app/build/outputs/apk/release/app-release.apk
           overwrite_files: true
           make_latest: true
 
+      # ---------------------------------------------------------
+      # 15. Upload GitHub Actions artifact
+      # ---------------------------------------------------------
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: hello-test-release-apk-v${{ steps.version.outputs.version_name }}
+          name: hello-test-release-apk-v${{ env.VERSION_NAME }}
           path: android/app/build/outputs/apk/release/app-release.apk
 
+      # ---------------------------------------------------------
+      # 16. Remove signing keystore
+      # ---------------------------------------------------------
       - name: Remove signing keystore
         if: always()
         run: |
