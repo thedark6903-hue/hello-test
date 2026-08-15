@@ -1,49 +1,25 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import {
-  ArrowLeft,
-  RotateCw,
-  CheckCircle2,
-  Download,
-  Sparkles,
-  Sun,
-  Moon,
-  Laptop,
-  Smartphone,
-  ShieldCheck,
-  RefreshCw,
+import { 
+  ArrowLeft, 
+  RotateCw, 
+  CheckCircle2, 
+  Download, 
+  Sparkles, 
+  Sun, 
+  Moon, 
+  Laptop, 
+  Info, 
+  ShieldCheck, 
+  Smartphone, 
+  ExternalLink,
+  ChevronRight,
+  RefreshCw
 } from 'lucide-react';
-import { CapacitorHttp } from '@capacitor/core';
-import { APP_VERSION, VERSION_CODE } from '../version.ts';
-
-const GITHUB_REPO = 'thedark6903-hue/hello-test';
+import { APP_VERSION } from '../version.ts';
+import { APP_NAME, APP_BUILD_NUMBER, checkForAppUpdates, type UpdateCheckResult } from '../utils/updateChecker.ts';
 
 export type ThemePreference = 'system' | 'light' | 'dark';
-
-type UpdateCheckResult = {
-  hasUpdate: boolean;
-  latestVersion: string;
-  releaseNotes?: string;
-  downloadUrl?: string;
-  checkedAt: Date;
-};
-
-function compareVersions(a: string, b: string) {
-  const aParts = a.replace(/^v/i, '').split('.').map(Number);
-  const bParts = b.replace(/^v/i, '').split('.').map(Number);
-
-  const length = Math.max(aParts.length, bParts.length);
-
-  for (let i = 0; i < length; i++) {
-    const aPart = Number.isFinite(aParts[i]) ? aParts[i] : 0;
-    const bPart = Number.isFinite(bParts[i]) ? bParts[i] : 0;
-
-    if (aPart > bPart) return 1;
-    if (aPart < bPart) return -1;
-  }
-
-  return 0;
-}
 
 interface SettingsViewProps {
   isOpen: boolean;
@@ -62,83 +38,41 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   isDark,
   onShowToast,
 }) => {
-  const [checking, setChecking] = useState(false);
+  const [checking, setChecking] = useState<boolean>(false);
   const [updateResult, setUpdateResult] = useState<UpdateCheckResult | null>(null);
+  const [simulatedUpdate, setSimulatedUpdate] = useState<boolean>(false);
 
   const handleCheckUpdates = async () => {
-    if (checking) return;
-
     setChecking(true);
+    // Add a natural brief delay for UX feel
+    await new Promise((resolve) => setTimeout(resolve, 800));
 
-    try {
-      const versionUrl =
-        `https://raw.githubusercontent.com/${GITHUB_REPO}/main/version.json?_=${Date.now()}`;
-
-      const response = await CapacitorHttp.get({
-        url: versionUrl,
-        headers: {
-          Accept: 'application/json',
-          'Cache-Control': 'no-cache',
-        },
-      });
-
-      if (response.status < 200 || response.status >= 300) {
-        throw new Error(`Version file HTTP ${response.status}`);
-      }
-
-      const data =
-        typeof response.data === 'string'
-          ? JSON.parse(response.data)
-          : response.data;
-
-      const latestVersion = String(data?.version || '')
-        .replace(/^v/i, '')
-        .trim();
-
-      const downloadUrl = String(
-        data?.apk ||
-        `https://github.com/${GITHUB_REPO}/releases/latest/download/app-release.apk`
-      ).trim();
-
-      if (!latestVersion) {
-        throw new Error('version.json has no version');
-      }
-
-      const result: UpdateCheckResult = {
-        hasUpdate: compareVersions(latestVersion, APP_VERSION) > 0,
-        latestVersion,
-        releaseNotes: data?.releaseNotes || 'New features and improvements.',
-        downloadUrl,
+    if (simulatedUpdate) {
+      setUpdateResult({
+        hasUpdate: true,
+        latestVersion: '1.1.0',
+        releaseNotes: '• Added new celebration particle effects\n• Enhanced settings & dark mode contrast\n• Optimized Android cold startup time\n• Security patches and memory improvements',
+        downloadUrl: 'https://github.com',
         checkedAt: new Date(),
-      };
-
+      });
+      onShowToast('New update v1.1.0 found!');
+    } else {
+      const result = await checkForAppUpdates();
       setUpdateResult(result);
-
       if (result.hasUpdate) {
         onShowToast(`Update ${result.latestVersion} available!`);
       } else {
-        onShowToast(`You're using the latest version (${APP_VERSION}).`);
+        onShowToast("You're using the latest version.");
       }
-    } catch (error) {
-      console.error('Update check failed:', error);
-
-      const message =
-        error instanceof Error ? error.message : String(error);
-
-      setUpdateResult(null);
-      onShowToast(`Update check failed: ${message}`);
-    } finally {
-      setChecking(false);
     }
+    setChecking(false);
   };
 
   const handleDownloadUpdate = (url?: string) => {
-    const apkUrl =
-      url ||
-      `https://github.com/${GITHUB_REPO}/releases/latest/download/app-release.apk`;
-
     onShowToast('Starting APK download...');
-    window.open(apkUrl, '_blank', 'noopener,noreferrer');
+    if (url && url !== '#') {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
   };
 
   return (
@@ -151,15 +85,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           exit={{ opacity: 0, x: 20 }}
           transition={{ duration: 0.25, ease: 'easeInOut' }}
           className={`fixed inset-0 z-40 flex flex-col ${
-            isDark
-              ? 'bg-[#121214] text-[#EDEDED]'
-              : 'bg-[#F9F9F9] text-[#1A1A1A]'
+            isDark ? 'bg-[#121214] text-[#EDEDED]' : 'bg-[#F9F9F9] text-[#1A1A1A]'
           } overflow-y-auto`}
         >
+          {/* Top Bar Navigation */}
           <div
             className={`sticky top-0 z-50 px-4 py-3.5 flex items-center justify-between border-b backdrop-blur-md ${
-              isDark
-                ? 'bg-[#121214]/90 border-zinc-800'
+              isDark 
+                ? 'bg-[#121214]/90 border-zinc-800' 
                 : 'bg-[#F9F9F9]/90 border-gray-200/80'
             }`}
           >
@@ -168,8 +101,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               type="button"
               onClick={onClose}
               className={`p-2 rounded-full transition-colors flex items-center gap-1.5 text-sm font-medium cursor-pointer ${
-                isDark
-                  ? 'hover:bg-zinc-800 text-zinc-300'
+                isDark 
+                  ? 'hover:bg-zinc-800 text-zinc-300' 
                   : 'hover:bg-gray-200 text-gray-700'
               }`}
               aria-label="Back to home"
@@ -177,15 +110,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <ArrowLeft className="w-5 h-5" />
               <span>Back</span>
             </button>
-
             <h2 className="text-base font-semibold tracking-tight">
               Settings & Update Center
             </h2>
-
-            <div className="w-14" />
+            <div className="w-14" /> {/* balance spacing */}
           </div>
 
           <div className="max-w-md w-full mx-auto p-4 sm:p-6 space-y-6 pb-12">
+            
+            {/* Header Hero Banner */}
             <div
               className={`p-5 rounded-3xl border transition-all ${
                 isDark
@@ -197,33 +130,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20 font-bold text-xl">
                   HT
                 </div>
-
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <h3 className="text-lg font-bold tracking-tight truncate">
-                      Hello Test
-                    </h3>
-
+                    <h3 className="text-lg font-bold tracking-tight truncate">{APP_NAME}</h3>
                     <span className="px-2 py-0.5 text-[11px] font-semibold rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
                       Active
                     </span>
                   </div>
-
-                  <p
-                    className={`text-xs ${
-                      isDark ? 'text-zinc-400' : 'text-gray-500'
-                    }`}
-                  >
-                    Version{' '}
-                    <span className="font-mono font-medium">
-                      {APP_VERSION}
-                    </span>{' '}
-                    (Build #{VERSION_CODE})
+                  <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                    Version <span className="font-mono font-medium">{APP_VERSION}</span> (Build #{APP_BUILD_NUMBER})
                   </p>
                 </div>
               </div>
             </div>
 
+            {/* UPDATE CENTER CARD */}
             <div
               id="update-center-card"
               className={`p-5 rounded-3xl border transition-all ${
@@ -234,32 +155,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             >
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <RefreshCw
-                    className={`w-4 h-4 ${
-                      isDark ? 'text-blue-400' : 'text-blue-600'
-                    }`}
-                  />
-
+                  <RefreshCw className={`w-4 h-4 ${isDark ? 'text-blue-400' : 'text-blue-600'}`} />
                   <h4 className="text-xs uppercase font-bold tracking-wider text-gray-400">
                     Update Center
                   </h4>
                 </div>
-
                 {updateResult?.checkedAt && (
-                  <span
-                    className={`text-[11px] ${
-                      isDark ? 'text-zinc-500' : 'text-gray-400'
-                    }`}
-                  >
-                    Checked{' '}
-                    {updateResult.checkedAt.toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
+                  <span className={`text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                    Checked {updateResult.checkedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 )}
               </div>
 
+              {/* Status Display Area */}
               {updateResult && !checking && (
                 <div className="mb-4">
                   {updateResult.hasUpdate ? (
@@ -272,31 +180,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     >
                       <div className="flex items-center gap-2 font-semibold text-sm mb-1.5">
                         <Sparkles className="w-4 h-4 text-blue-500 shrink-0" />
-                        <span>
-                          Update v{updateResult.latestVersion} Available!
-                        </span>
+                        <span>Update v{updateResult.latestVersion} Available!</span>
                       </div>
-
                       {updateResult.releaseNotes && (
-                        <p
-                          className={`text-xs whitespace-pre-line mb-3 leading-relaxed ${
-                            isDark ? 'text-zinc-300' : 'text-gray-700'
-                          }`}
-                        >
+                        <p className={`text-xs whitespace-pre-line mb-3 font-sans leading-relaxed ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
                           {updateResult.releaseNotes}
                         </p>
                       )}
-
                       <button
                         id="download-update-btn"
                         type="button"
-                        onClick={() =>
-                          handleDownloadUpdate(updateResult.downloadUrl)
-                        }
+                        onClick={() => handleDownloadUpdate(updateResult.downloadUrl)}
                         className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all shadow-md shadow-blue-500/20 cursor-pointer"
                       >
                         <Download className="w-3.5 h-3.5" />
-                        <span>Download Update APK</span>
+                        <span>Download & Install APK</span>
                       </button>
                     </div>
                   ) : (
@@ -308,15 +206,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       }`}
                     >
                       <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-
                       <span className="text-xs font-medium">
-                        You're using the latest version ({APP_VERSION})
+                        You're using the latest version (v{APP_VERSION})
                       </span>
                     </div>
                   )}
                 </div>
               )}
 
+              {/* Check for Updates Button */}
               <button
                 id="check-updates-btn"
                 type="button"
@@ -328,16 +226,36 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     : 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white shadow-md shadow-blue-500/20'
                 }`}
               >
-                <RotateCw
-                  className={`w-4 h-4 ${checking ? 'animate-spin' : ''}`}
-                />
-
-                <span>
-                  {checking ? 'Checking for updates...' : 'Check for Updates'}
-                </span>
+                <RotateCw className={`w-4 h-4 ${checking ? 'animate-spin' : ''}`} />
+                <span>{checking ? 'Checking for updates...' : 'Check for Updates'}</span>
               </button>
+
+              {/* Dev/Tester simulation toggle */}
+              <div className="mt-3 pt-3 border-t border-dashed border-gray-200 dark:border-zinc-800 flex items-center justify-between text-xs">
+                <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>
+                  Simulate New Version Available
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSimulatedUpdate((prev) => !prev);
+                    setUpdateResult(null);
+                    onShowToast(!simulatedUpdate ? 'Simulator: v1.1.0 update enabled' : 'Simulator: regular up-to-date');
+                  }}
+                  className={`px-2.5 py-1 rounded-lg font-medium text-[11px] transition-colors cursor-pointer ${
+                    simulatedUpdate
+                      ? 'bg-amber-500 text-white'
+                      : isDark
+                      ? 'bg-zinc-800 text-zinc-400 hover:text-white'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  {simulatedUpdate ? 'Active (v1.1.0)' : 'Off (Latest)'}
+                </button>
+              </div>
             </div>
 
+            {/* APPEARANCE / THEME CARD */}
             <div
               id="appearance-card"
               className={`p-5 rounded-3xl border transition-all ${
@@ -349,20 +267,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <h4 className="text-xs uppercase font-bold tracking-wider text-gray-400 mb-3.5">
                 Appearance
               </h4>
-
               <div className="grid grid-cols-3 gap-2">
                 {[
                   { id: 'light' as ThemePreference, label: 'Light', icon: Sun },
                   { id: 'dark' as ThemePreference, label: 'Dark', icon: Moon },
-                  {
-                    id: 'system' as ThemePreference,
-                    label: 'System',
-                    icon: Laptop,
-                  },
+                  { id: 'system' as ThemePreference, label: 'System', icon: Laptop },
                 ].map((item) => {
                   const Icon = item.icon;
                   const isSelected = theme === item.id;
-
                   return (
                     <button
                       key={item.id}
@@ -371,10 +283,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       onClick={() => onThemeChange(item.id)}
                       className={`py-3 px-2 rounded-2xl flex flex-col items-center justify-center gap-1.5 transition-all text-xs font-medium cursor-pointer ${
                         isSelected
-                          ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                          ? isDark
+                            ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                            : 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
                           : isDark
-                            ? 'bg-zinc-800/80 text-zinc-300 hover:bg-zinc-800'
-                            : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+                          ? 'bg-zinc-800/80 text-zinc-300 hover:bg-zinc-800'
+                          : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
                       }`}
                     >
                       <Icon className="w-4 h-4" />
@@ -385,6 +299,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </div>
             </div>
 
+            {/* ABOUT & APP INFO CARD */}
             <div
               id="about-card"
               className={`p-5 rounded-3xl border transition-all ${
@@ -396,79 +311,48 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <h4 className="text-xs uppercase font-bold tracking-wider text-gray-400 mb-3.5">
                 About & Information
               </h4>
-
               <div className="space-y-3 text-xs">
                 <div className="flex justify-between py-1.5 border-b border-gray-100 dark:border-zinc-800">
-                  <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>
-                    Application Name
-                  </span>
-                  <span className="font-semibold">Hello Test</span>
+                  <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Application Name</span>
+                  <span className="font-semibold">{APP_NAME}</span>
                 </div>
-
                 <div className="flex justify-between py-1.5 border-b border-gray-100 dark:border-zinc-800">
-                  <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>
-                    Current Version
-                  </span>
-                  <span className="font-mono font-medium">
-                    {APP_VERSION}
-                  </span>
+                  <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Current Version</span>
+                  <span className="font-mono font-medium">{APP_VERSION}</span>
                 </div>
-
                 <div className="flex justify-between py-1.5 border-b border-gray-100 dark:border-zinc-800">
-                  <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>
-                    Build Number
-                  </span>
-                  <span className="font-mono font-medium">
-                    #{VERSION_CODE}
-                  </span>
+                  <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Build Number</span>
+                  <span className="font-mono font-medium">#{APP_BUILD_NUMBER}</span>
                 </div>
-
                 <div className="flex justify-between py-1.5 border-b border-gray-100 dark:border-zinc-800">
-                  <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>
-                    Channel
-                  </span>
-                  <span className="font-medium text-blue-500">
-                    Release (Production)
-                  </span>
+                  <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Channel</span>
+                  <span className="font-medium text-blue-500">Release (Production)</span>
                 </div>
-
                 <div className="flex justify-between py-1.5 border-b border-gray-100 dark:border-zinc-800">
-                  <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>
-                    Platform
-                  </span>
-
+                  <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Platform</span>
                   <span className="font-medium flex items-center gap-1">
                     <Smartphone className="w-3 h-3 text-gray-400" />
-                    Android
+                    <span>Android / Web</span>
                   </span>
                 </div>
-
                 <div className="pt-2">
-                  <p
-                    className={`leading-relaxed ${
-                      isDark ? 'text-zinc-400' : 'text-gray-500'
-                    }`}
-                  >
-                    Hello Test is a mobile application featuring interactive
-                    controls, animation workflows, dynamic theming, and an
-                    integrated release and update checking mechanism.
+                  <p className={`leading-relaxed ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                    Hello Test is a mobile application featuring interactive touch controls, animation workflows, dynamic theming, and an integrated release and update checking mechanism.
                   </p>
                 </div>
               </div>
             </div>
 
+            {/* Quick Status Bar */}
             <div className="text-center pt-2">
-              <span
-                className={`text-[11px] font-medium inline-flex items-center gap-1.5 px-3 py-1 rounded-full ${
-                  isDark
-                    ? 'bg-zinc-800/80 text-zinc-400'
-                    : 'bg-gray-100 text-gray-500'
-                }`}
-              >
+              <span className={`text-[11px] font-medium inline-flex items-center gap-1.5 px-3 py-1 rounded-full ${
+                isDark ? 'bg-zinc-800/80 text-zinc-400' : 'bg-gray-100 text-gray-500'
+              }`}>
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
                 Verified & Ready for Android Deployment
               </span>
             </div>
+
           </div>
         </motion.div>
       )}

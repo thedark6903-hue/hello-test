@@ -1,193 +1,65 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { CapacitorHttp } from '@capacitor/core';
 import { Settings } from 'lucide-react';
-import { APP_VERSION } from './version';
-import { SettingsView, ThemePreference } from './components/SettingsView';
-
-const GITHUB_REPO = 'thedark6903-hue/hello-test';
-
-const CURRENT_VERSION = APP_VERSION;
-
-type UpdateInfo = {
-  versionName: string;
-  apkUrl: string;
-};
-
-function compareVersions(a: string, b: string) {
-  const aParts = a.replace(/^v/i, '').split('.').map(Number);
-  const bParts = b.replace(/^v/i, '').split('.').map(Number);
-
-  const length = Math.max(aParts.length, bParts.length);
-
-  for (let i = 0; i < length; i++) {
-    const aPart = Number.isFinite(aParts[i]) ? aParts[i] : 0;
-    const bPart = Number.isFinite(bParts[i]) ? bParts[i] : 0;
-
-    if (aPart > bPart) return 1;
-    if (aPart < bPart) return -1;
-  }
-
-  return 0;
-}
+import { APP_VERSION } from './version.ts';
+import { APP_NAME } from './utils/updateChecker.ts';
+import { SettingsView, ThemePreference } from './components/SettingsView.tsx';
 
 export default function App() {
   const [count, setCount] = useState<number>(0);
   const [toast, setToast] = useState<string | null>(null);
-  const [update, setUpdate] = useState<UpdateInfo | null>(null);
-  const [checkingUpdate, setCheckingUpdate] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-
+  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [theme, setTheme] = useState<ThemePreference>(() => {
-    if (typeof window === 'undefined') return 'system';
-
-    const saved = window.localStorage.getItem('app_theme');
+    const saved = localStorage.getItem('app_theme');
     if (saved === 'light' || saved === 'dark' || saved === 'system') {
       return saved;
     }
-
     return 'system';
   });
 
   const [systemIsDark, setSystemIsDark] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    if (typeof window !== 'undefined') {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+    return false;
   });
 
-  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleChange = (e: MediaQueryListEvent) => {
+      setSystemIsDark(e.matches);
+    };
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
+
+  const handleThemeChange = (newTheme: ThemePreference) => {
+    setTheme(newTheme);
+    localStorage.setItem('app_theme', newTheme);
+  };
+
+  const isDark = theme === 'dark' || (theme === 'system' && systemIsDark);
+
+  const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const triggerToast = (msg: string) => {
     if (toastTimeoutRef.current) {
       clearTimeout(toastTimeoutRef.current);
     }
-
     setToast(msg);
-
     toastTimeoutRef.current = setTimeout(() => {
       setToast(null);
-    }, 5000);
+    }, 2500);
   };
-
-  const handleThemeChange = (newTheme: ThemePreference) => {
-    setTheme(newTheme);
-    window.localStorage.setItem('app_theme', newTheme);
-  };
-
-  const isDark = theme === 'dark' || (theme === 'system' && systemIsDark);
-
-  const checkForUpdate = async () => {
-    if (checkingUpdate) return;
-
-    setCheckingUpdate(true);
-
-    try {
-      const cacheBuster = Date.now();
-
-      const versionUrl =
-        `https://raw.githubusercontent.com/${GITHUB_REPO}/main/version.json?_=${cacheBuster}`;
-
-      console.log('Checking version:', versionUrl);
-      console.log('Current version:', CURRENT_VERSION);
-
-      const response = await CapacitorHttp.get({
-        url: versionUrl,
-        headers: {
-          Accept: 'application/json',
-          'Cache-Control': 'no-cache',
-        },
-      });
-
-      console.log('Version response status:', response.status);
-      console.log('Version response data:', response.data);
-
-      if (response.status < 200 || response.status >= 300) {
-        throw new Error(`Version file HTTP ${response.status}`);
-      }
-
-      const data =
-        typeof response.data === 'string'
-          ? JSON.parse(response.data)
-          : response.data;
-
-      const latestVersion = String(data?.version || '')
-        .replace(/^v/i, '')
-        .trim();
-
-      const apkUrl = String(data?.apk || '').trim();
-
-      if (!latestVersion) {
-        throw new Error('version.json has no version');
-      }
-
-      if (!apkUrl) {
-        throw new Error('version.json has no APK URL');
-      }
-
-      console.log('Latest version:', latestVersion);
-      console.log('APK URL:', apkUrl);
-
-      if (compareVersions(latestVersion, CURRENT_VERSION) > 0) {
-        setUpdate({
-          versionName: latestVersion,
-          apkUrl,
-        });
-
-        triggerToast(`New version ${latestVersion} available!`);
-      } else {
-        setUpdate(null);
-
-        triggerToast(
-          `You are using the latest version (${CURRENT_VERSION}).`,
-        );
-      }
-    } catch (error) {
-      console.error('Update check failed:', error);
-
-      const message =
-        error instanceof Error
-          ? error.message
-          : String(error);
-
-      triggerToast(`Update check failed: ${message}`);
-    } finally {
-      setCheckingUpdate(false);
-    }
-  };
-
-  useEffect(() => {
-    checkForUpdate();
-
-    return () => {
-      if (toastTimeoutRef.current) {
-        clearTimeout(toastTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-
-    const handleChange = (event: MediaQueryListEvent) => {
-      setSystemIsDark(event.matches);
-    };
-
-    setSystemIsDark(mediaQuery.matches);
-    mediaQuery.addEventListener('change', handleChange);
-
-    return () => {
-      mediaQuery.removeEventListener('change', handleChange);
-    };
-  }, []);
 
   return (
     <div
       id="app-container"
       className={`min-h-screen ${
-        isDark
-          ? 'bg-[#121214] text-[#EDEDED]'
-          : 'bg-[#F9F9F9] text-[#1A1A1A]'
+        isDark ? 'bg-[#121214] text-[#EDEDED]' : 'bg-[#F9F9F9] text-[#1A1A1A]'
       } flex items-center justify-center p-4 sm:p-6 font-sans antialiased relative transition-colors duration-200`}
     >
+      {/* Toast Notification */}
       <AnimatePresence>
         {toast && (
           <motion.div
@@ -196,48 +68,47 @@ export default function App() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -20, scale: 0.95 }}
             transition={{ duration: 0.2 }}
-            className={`fixed top-6 left-4 right-4 z-50 mx-auto max-w-md px-5 py-3 rounded-2xl shadow-xl text-sm font-medium flex items-center gap-2 border ${
-              isDark
-                ? 'bg-zinc-800 text-white border-zinc-700'
+            className={`fixed top-6 z-50 px-6 py-3 rounded-full shadow-xl text-sm font-medium flex items-center gap-2 border ${
+              isDark 
+                ? 'bg-zinc-800 text-white border-zinc-700' 
                 : 'bg-slate-900 text-white border-slate-700/50'
             }`}
           >
             <span>✨</span>
-            <span className="break-words">{toast}</span>
+            <span>{toast}</span>
           </motion.div>
         )}
       </AnimatePresence>
 
+      {/* Main App Window / Card */}
       <div
         className={`w-full max-w-md ${
           isDark
-            ? 'bg-zinc-900/95 border-zinc-800 shadow-[0_32px_64px_-12px_rgba(0,0,0,0.5)]'
-            : 'bg-white border-gray-100 shadow-[0_32px_64px_-12px_rgba(0,0,0,0.08)]'
+            ? 'bg-zinc-900/95 border-zinc-800 text-[#EDEDED] shadow-[0_32px_64px_-12px_rgba(0,0,0,0.5)]'
+            : 'bg-white border-gray-100 text-[#1A1A1A] shadow-[0_32px_64px_-12px_rgba(0,0,0,0.08)]'
         } rounded-3xl sm:rounded-[40px] border flex flex-col justify-between overflow-hidden min-h-[640px] relative my-auto transition-colors duration-200`}
       >
+        {/* Header */}
         <header id="app-header" className="pt-8 sm:pt-10 px-8 pb-4">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-gray-400 mb-1">
                 Mobile Application
               </p>
-
-              <h1
-                id="app-title"
-                className="text-2xl font-serif italic"
-              >
-                Hello Test
+              <h1 id="app-title" className="text-2xl font-serif italic">
+                {APP_NAME}
               </h1>
             </div>
-
+            
+            {/* Settings & Update Center Gear Button */}
             <button
               id="open-settings-btn"
               type="button"
-              onClick={() => setSettingsOpen(true)}
-              className={`p-2.5 rounded-2xl transition-all duration-200 cursor-pointer active:scale-95 ${
+              onClick={() => setIsSettingsOpen(true)}
+              className={`p-2.5 rounded-2xl transition-all duration-200 cursor-pointer ${
                 isDark
-                  ? 'bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300'
-                  : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                  ? 'bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 active:scale-95'
+                  : 'bg-gray-100 hover:bg-gray-200 text-gray-700 active:scale-95'
               }`}
               title="Settings & Update Center"
               aria-label="Settings & Update Center"
@@ -245,73 +116,27 @@ export default function App() {
               <Settings className="w-5 h-5" />
             </button>
           </div>
-
-          <div
-            className={`h-[1px] w-full mt-4 ${
-              isDark ? 'bg-zinc-800' : 'bg-gray-100'
-            }`}
-          />
+          <div className={`h-[1px] w-full ${isDark ? 'bg-zinc-800' : 'bg-gray-100'} mt-4`} />
         </header>
 
-        <AnimatePresence>
-          {update && (
-            <motion.div
-              initial={{ opacity: 0, height: 0, y: -10 }}
-              animate={{ opacity: 1, height: 'auto', y: 0 }}
-              exit={{ opacity: 0, height: 0, y: -10 }}
-              className="px-6"
-            >
-              <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4">
-                <div className="flex items-start gap-3">
-                  <div className="text-2xl">🚀</div>
-
-                  <div className="flex-1">
-                    <p className="font-semibold text-blue-900">
-                      New update available
-                    </p>
-
-                    <p className="text-sm text-blue-700 mt-1">
-                      Version {update.versionName} is ready.
-                    </p>
-
-                    <a
-                      href={update.apkUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex mt-3 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-full text-sm font-semibold"
-                    >
-                      Download Update
-                    </a>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        <main
-          id="main-content"
-          className="flex-1 flex flex-col items-center justify-center px-8 text-center py-6"
-        >
+        {/* Main Content */}
+        <main id="main-content" className="flex-1 flex flex-col items-center justify-center px-8 text-center py-6">
           <div className="space-y-2 mb-8">
-            <h2
-              id="hello-world-text"
-              className="text-4xl sm:text-5xl font-serif leading-tight tracking-tight"
-            >
+            <h2 id="hello-world-text" className="text-4xl sm:text-5xl font-serif leading-tight tracking-tight">
               Hello World 👋
             </h2>
-
             <p className="text-gray-400 text-sm font-light italic">
               A simple demonstration of interactive design.
             </p>
           </div>
 
+          {/* Action Buttons */}
           <div className="w-full space-y-3 mb-6">
             <button
               id="happy-btn"
               type="button"
               onClick={() => triggerToast('Happy clicked! 😊')}
-              className="w-full bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white py-4 px-6 rounded-full text-base font-semibold shadow-lg shadow-amber-200 active:scale-95 transition-all duration-200 cursor-pointer select-none focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 flex items-center justify-center gap-2"
+              className="w-full bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white py-4 px-6 rounded-full text-base font-semibold shadow-lg shadow-amber-200 dark:shadow-amber-950/30 active:scale-95 transition-all duration-200 cursor-pointer select-none focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 flex items-center justify-center gap-2"
             >
               😊 Happy
             </button>
@@ -320,79 +145,51 @@ export default function App() {
               id="firework-btn"
               type="button"
               onClick={() => triggerToast('Firework clicked!')}
-              className="w-full bg-purple-600 hover:bg-purple-700 active:bg-purple-800 text-white py-4 px-6 rounded-full text-base font-semibold shadow-lg shadow-purple-200 active:scale-95 transition-all duration-200 cursor-pointer select-none focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 flex items-center justify-center gap-2"
+              className="w-full bg-purple-600 hover:bg-purple-700 active:bg-purple-800 text-white py-4 px-6 rounded-full text-base font-semibold shadow-lg shadow-purple-200 dark:shadow-purple-950/30 active:scale-95 transition-all duration-200 cursor-pointer select-none focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 flex items-center justify-center gap-2"
             >
               🔥 Firework
             </button>
           </div>
 
           <div className="w-full space-y-6">
+            {/* Blue Action Button */}
             <button
               id="click-me-btn"
               type="button"
               onClick={() => setCount((prev) => prev + 1)}
-              className="w-full bg-[#2563EB] hover:bg-blue-700 text-white py-5 rounded-2xl text-sm font-bold tracking-widest uppercase shadow-lg shadow-blue-200 active:scale-95 transition-all duration-200 cursor-pointer select-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              className="w-full bg-[#2563EB] hover:bg-blue-700 text-white py-5 rounded-2xl text-sm font-bold tracking-widest uppercase shadow-lg shadow-blue-200 dark:shadow-blue-950/40 active:scale-95 transition-all duration-200 cursor-pointer select-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
             >
               Click Me
             </button>
 
-            <div
-              className={`py-6 border-y flex flex-col items-center w-full ${
-                isDark ? 'border-zinc-800' : 'border-gray-100'
-              }`}
-            >
+            <div className={`py-6 border-y ${isDark ? 'border-zinc-800' : 'border-gray-100'} flex flex-col items-center w-full`}>
               <span className="text-[10px] uppercase tracking-[0.1em] text-gray-400 mb-1">
                 Interaction Stats
               </span>
-
-              <p
-                id="counter-display"
-                className="text-2xl sm:text-3xl font-mono font-light"
-              >
+              <p id="counter-display" className="text-2xl sm:text-3xl font-mono font-light">
                 Button clicked: {count}
               </p>
-            </div>
-
-            <div className="flex flex-col items-center gap-2">
-              <span className="text-[10px] uppercase tracking-widest text-gray-400">
-                Version {CURRENT_VERSION}
-              </span>
-
-              <button
-                type="button"
-                onClick={checkForUpdate}
-                disabled={checkingUpdate}
-                className="text-xs text-blue-600 hover:text-blue-700 disabled:text-gray-400 font-medium"
-              >
-                {checkingUpdate ? 'Checking...' : 'Check for updates'}
-              </button>
             </div>
           </div>
         </main>
 
-        <footer
-          id="app-footer"
-          className="pb-8 px-8 flex flex-col items-center justify-center"
-        >
-          <div
-            className={`w-24 h-1 rounded-full mb-2 ${
-              isDark ? 'bg-zinc-800' : 'bg-gray-200'
-            }`}
-          />
-
+        {/* Footer */}
+        <footer id="app-footer" className="pb-8 px-8 flex flex-col items-center justify-center">
+          <div className={`w-24 h-1 ${isDark ? 'bg-zinc-800' : 'bg-gray-200'} rounded-full mb-2`} />
           <button
             type="button"
-            onClick={() => setSettingsOpen(true)}
+            onClick={() => setIsSettingsOpen(true)}
             className="text-[10px] text-gray-400 uppercase tracking-widest hover:text-blue-500 transition-colors cursor-pointer"
           >
-            Hello Test • v{CURRENT_VERSION}
+            {APP_NAME} • v{APP_VERSION}
           </button>
         </footer>
       </div>
 
+      {/* Settings & Update Center Screen */}
       <SettingsView
-        isOpen={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
         theme={theme}
         onThemeChange={handleThemeChange}
         isDark={isDark}
@@ -401,3 +198,5 @@ export default function App() {
     </div>
   );
 }
+
+
