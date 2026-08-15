@@ -4,11 +4,13 @@ import { Settings } from 'lucide-react';
 import { APP_VERSION } from './version.ts';
 import { APP_NAME } from './utils/updateChecker.ts';
 import { SettingsView, ThemePreference } from './components/SettingsView.tsx';
+import { FireworksCanvas, FireworksHandle } from './components/FireworksCanvas.tsx';
 
 export default function App() {
   const [count, setCount] = useState<number>(0);
   const [toast, setToast] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const fireworksRef = useRef<FireworksHandle | null>(null);
   const [theme, setTheme] = useState<ThemePreference>(() => {
     const saved = localStorage.getItem('app_theme');
     if (saved === 'light' || saved === 'dark' || saved === 'system') {
@@ -52,6 +54,11 @@ export default function App() {
     }, 2500);
   };
 
+  const handleFireworkClick = () => {
+    fireworksRef.current?.trigger();
+    triggerToast('Firework clicked! 🎆');
+  };
+
   return (
     <div
       id="app-container"
@@ -59,6 +66,9 @@ export default function App() {
         isDark ? 'bg-[#121214] text-[#EDEDED]' : 'bg-[#F9F9F9] text-[#1A1A1A]'
       } flex items-center justify-center p-4 sm:p-6 font-sans antialiased relative transition-colors duration-200`}
     >
+      {/* Fireworks Canvas Layer */}
+      <FireworksCanvas ref={fireworksRef} />
+
       {/* Toast Notification */}
       <AnimatePresence>
         {toast && (
@@ -144,10 +154,10 @@ export default function App() {
             <button
               id="firework-btn"
               type="button"
-              onClick={() => triggerToast('Firework clicked!')}
+              onClick={handleFireworkClick}
               className="w-full bg-purple-600 hover:bg-purple-700 active:bg-purple-800 text-white py-4 px-6 rounded-full text-base font-semibold shadow-lg shadow-purple-200 dark:shadow-purple-950/30 active:scale-95 transition-all duration-200 cursor-pointer select-none focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 flex items-center justify-center gap-2"
             >
-              🔥 Firework
+              🎆 Firework
             </button>
           </div>
 
